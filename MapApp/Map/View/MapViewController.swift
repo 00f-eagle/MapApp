@@ -12,10 +12,10 @@ import Mapbox
 final class MapViewController: UIViewController {
     
     // MARK: - Constants
-    
-    // Пока константа, надо будет сделать LocationManager
+
     private enum Locals {
-        static let loc = CLLocationCoordinate2DMake(55.642654, 37.477162)
+        static let loc = CLLocationCoordinate2D(latitude: 55.642654, longitude: 37.477162)
+        static let loc2 = CLLocationCoordinate2D(latitude: 55.606319, longitude: 37.735656)
         static let zoom: Double = 15
     }
     
@@ -41,13 +41,18 @@ final class MapViewController: UIViewController {
         mapView.zoomLevel = Locals.zoom
         mapView.delegate = self
         view.addSubview(mapView)
-
-        let ann = MGLPointAnnotation()
-        ann.coordinate = Locals.loc
-        ann.title = "Вы здесь"
-        mapView.addAnnotation(ann)
+        let ann1 = createAnnotation(title: "Вы здесь", coordinate: Locals.loc)
+        let ann2 = createAnnotation(title: "Друг здесь", coordinate: Locals.loc2)
+        mapView.addAnnotation(ann1)
+        mapView.addAnnotation(ann2)
     }
     
+    private func createAnnotation(title: String, coordinate: CLLocationCoordinate2D) -> MGLPointAnnotation {
+        let ann = MGLPointAnnotation()
+        ann.coordinate = coordinate
+        ann.title = title
+        return ann
+    }
 }
 
 
@@ -57,33 +62,25 @@ extension MapViewController: MGLMapViewDelegate {
         return true
     }
     
-    
-    // This delegate method is where you tell the map to load a view for a specific annotation. To load a static MGLAnnotationImage, you would use `-mapView:imageForAnnotation:`.
     func mapView(_ mapView: MGLMapView, viewFor annotation: MGLAnnotation) -> MGLAnnotationView? {
-    // This example is only concerned with point annotations.
-    guard annotation is MGLPointAnnotation else {
-    return nil
+        guard annotation is MGLPointAnnotation else {
+            return nil
+        }
+        
+        let reuseIdentifier = "\(annotation.coordinate.longitude)"
+
+        var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: reuseIdentifier)
+
+        if annotationView == nil {
+            annotationView = CustomAnnotationView(reuseIdentifier: reuseIdentifier)
+            annotationView!.bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
+
+            let hue = CGFloat(annotation.coordinate.longitude) / 100
+            annotationView!.backgroundColor = UIColor(hue: hue, saturation: 0.5, brightness: 1, alpha: 1)
+        }
+        
+        return annotationView
     }
-     
-    // Use the point annotation’s longitude value (as a string) as the reuse identifier for its view.
-    let reuseIdentifier = "\(annotation.coordinate.longitude)"
-     
-    // For better performance, always try to reuse existing annotations.
-    var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: reuseIdentifier)
-     
-    // If there’s no reusable annotation view available, initialize a new one.
-    if annotationView == nil {
-    annotationView = CustomAnnotationView(reuseIdentifier: reuseIdentifier)
-    annotationView!.bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
-     
-    // Set the annotation view’s background color to a value determined by its longitude.
-    let hue = CGFloat(annotation.coordinate.longitude) / 100
-    annotationView!.backgroundColor = UIColor(hue: hue, saturation: 0.5, brightness: 1, alpha: 1)
-    }
-     
-    return annotationView
-    }
-    
 }
 
 
