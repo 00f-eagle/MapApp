@@ -26,10 +26,19 @@ final class MapViewController: UIViewController {
     
     private let mapView = MGLMapView()
     private let createUserButton = UIButton()
-    var polylineSource: MGLShapeSource?
-    var currentIndex = 1
-    var timer: Timer?
-    var allCoordinates: [CLLocationCoordinate2D]!
+    private var allCoordinates: [CLLocationCoordinate2D]!
+    
+    // Line
+    private var lineShape: MGLShapeSource!
+    private var lineWay: MGLLineStyleLayer!
+    
+    // Animate
+    private var animateLineWay: MGLLineStyleLayer!
+    private var animateShape: MGLShapeSource!
+    private var timer: Timer!
+    private var currentIndex = 1
+    private var count = 1
+    
     
     // MARK: - Lifecycle
     
@@ -50,9 +59,10 @@ final class MapViewController: UIViewController {
         mapView.delegate = self
         mapView.userTrackingMode = .follow
         mapView.showsUserLocation = true
+        mapView.isHidden = true
         view.addSubview(mapView)
         
-        allCoordinates = Coordinates.myCoordinates
+        allCoordinates = Coordinates.friendCoordinates
     }
     
     private func configureCreateUserButton() {
@@ -63,7 +73,6 @@ final class MapViewController: UIViewController {
         createUserButton.addTarget(self, action: #selector(createUser), for: .touchUpInside)
         createUserButton.layer.borderWidth = 1
         createUserButton.layer.cornerRadius = Constants.sizeButton/2
-        createUserButton.isHidden = true
         mapView.addSubview(createUserButton)
         
         NSLayoutConstraint.activate([
@@ -86,6 +95,34 @@ final class MapViewController: UIViewController {
     @objc private func createUser() {
         let ann = createAnnotation(title: "Друг здесь", coordinate: Constants.locFriend)
         mapView.addAnnotation(ann)
+        addPolyline()
+    }
+    
+    private func addPolyline() {
+        let polyline = MGLPolylineFeature(coordinates: allCoordinates, count: UInt(allCoordinates.count))
+        lineShape.shape = polyline
+        currentIndex = 1
+        timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(animatePolyline), userInfo: nil, repeats: true)
+    }
+    
+    @objc private func animatePolyline() {
+        if currentIndex > allCoordinates.count {
+            timer?.invalidate()
+            timer = nil
+            if count < 3 {
+                count += 1
+                addPolyline()
+            }
+            return
+        }
+        
+        let coordinates = Array(allCoordinates[0..<currentIndex])
+        
+        let polyline = MGLPolylineFeature(coordinates: coordinates, count: UInt(coordinates.count))
+        
+        animateShape.shape = polyline
+        
+        currentIndex += 1
     }
     
 }
@@ -93,9 +130,6 @@ final class MapViewController: UIViewController {
 
 // MARK: - MGLMapViewDelegate
 extension MapViewController: MGLMapViewDelegate {
-    func mapView(_ mapView: MGLMapView, annotationCanShowCallout annotation: MGLAnnotation) -> Bool {
-        return true
-    }
     
     func mapView(_ mapView: MGLMapView, viewFor annotation: MGLAnnotation) -> MGLAnnotationView? {
         switch annotation {
@@ -117,58 +151,33 @@ extension MapViewController: MGLMapViewDelegate {
         }
     }
     
+    func mapView(_ mapView: MGLMapView, didFinishLoading style: MGLStyle) {
+        lineShape = MGLShapeSource(identifier: "line", shape: nil, options: nil)
+        style.addSource(lineShape)
+        animateShape = MGLShapeSource(identifier: "animateLine", shape: nil, options: nil)
+        style.addSource(animateShape)
+        
+        lineWay = MGLLineStyleLayer(identifier: "line", source: lineShape)
+        lineWay.lineColor = NSExpression(forConstantValue: UIColor(red: 0, green: 0, blue: 0, alpha: 0.3))
+        lineWay.lineWidth = NSExpression(forConstantValue: 5)
+        lineWay.lineCap = NSExpression(forConstantValue: "round")
+        animateLineWay = MGLLineStyleLayer(identifier: "animateLine", source: animateShape)
+        animateLineWay.lineColor = NSExpression(forConstantValue: UIColor.black)
+        animateLineWay.lineWidth = NSExpression(forConstantValue: 5)
+        animateLineWay.lineCap = NSExpression(forConstantValue: "round")
+        
+        style.addLayer(lineWay)
+        style.insertLayer(animateLineWay, below: lineWay)
+    }
+    
     func mapViewDidFinishLoadingMap(_ mapView: MGLMapView) {
-        createUserButton.isHidden = false
-        //addPolyline(to: mapView.style!)
-        //animatePolyline()
+        mapView.isHidden = false
     }
     
-    func addPolyline(to style: MGLStyle) {
-        // Add an empty MGLShapeSource, we’ll keep a reference to this and add points to this later.
-        let source = MGLShapeSource(identifier: "polyline", shape: nil, options: nil)
-        style.addSource(source)
-        polylineSource = source
-        
-        let polyline = MGLPolylineFeature(coordinates: allCoordinates, count: UInt(allCoordinates.count))
-        polylineSource?.shape = polyline
-        //         Add a layer to style our polyline.
-        let layer = MGLLineStyleLayer(identifier: "polyline", source: source)
-        layer.lineColor = NSExpression(forConstantValue: UIColor.black)
-        layer.lineWidth = NSExpression(forConstantValue: 5)
-        //        style.addLayer(layer)
+    func mapView(_ mapView: MGLMapView, annotationCanShowCallout annotation: MGLAnnotation) -> Bool {
+        return true
     }
     
-    func animatePolyline() {
-        currentIndex = 1
-        
-        // Start a timer that will simulate adding points to our polyline. This could also represent coordinates being added to our polyline from another source, such as a CLLocationManagerDelegate.
-        timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
-    }
-    
-    @objc func tick() {
-        if currentIndex > allCoordinates.count {
-            timer?.invalidate()
-            timer = nil
-            return
-        }
-        
-        // Create a subarray of locations up to the current index.
-        let coordinates = Array(allCoordinates[0..<currentIndex])
-        
-        // Update our MGLShapeSource with the current locations.
-        updatePolylineWithCoordinates(coordinates: coordinates)
-        
-        currentIndex += 1
-    }
-    
-    func updatePolylineWithCoordinates(coordinates: [CLLocationCoordinate2D]) {
-        var mutableCoordinates = coordinates
-        
-        let polyline = MGLPolylineFeature(coordinates: &mutableCoordinates, count: UInt(mutableCoordinates.count))
-        
-        // Updating the MGLShapeSource’s shape will have the map redraw our polyline with the current coordinates.
-        polylineSource?.shape = polyline
-    }
 }
 
 
